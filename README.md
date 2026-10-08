@@ -37,16 +37,15 @@ API: `GET /health`, `GET /signals/{drug}`, `GET /summary/{drug}`, `POST /ask` wi
 
 ## How well does it work (measured)
 
-**Label matching** (72 reaction-drug pairs across 6 drugs, human-labelled "is this reaction named in the label text"). Dev drugs were used to tune the matcher; holdout drugs were not.
+**Label matching** (72 reaction-drug pairs across 6 drugs, human-labelled "is this reaction named in the label text"). Two drugs were used to develop the matcher (dev) and four were held out (holdout).
 
 | | precision | recall |
 |---|---|---|
+| holdout, first run (not tuned against) | 0.77 | 0.96 |
 | dev, first run | 0.81 | 0.87 |
 | dev, after tuning | 1.00 | 0.93 |
-| holdout, first run | 0.77 | 0.96 |
-| holdout, after tuning | 0.82 | 0.96 |
 
-The honest holdout figure is the first-run one. The after-tuning holdout numbers are contaminated: I looked at holdout disagreements before making two matcher fixes (a standalone rule for the generic term "pain" and the removal of one alias). A baseline that calls everything "labeled" scores precision 0.60.
+A baseline that calls everything "labeled" scores precision 0.60 on this set. After the first run I made two matcher fixes (a standalone rule for the generic term "pain", and removing one over-broad synonym), which lifted holdout precision to 0.82 at the same recall. I report 0.77 as the headline because those two fixes were chosen after seeing holdout errors, so the later number is not an independent test.
 
 **Summary checks** (6 drugs x 5 repeats = 30 runs, `openai/gpt-oss-20b` via Groq): 29 passed on the first attempt, 1 passed after a retry (the model omitted a flagged reaction), 0 fell back to the template. In one run Groq failed and the local model answered. Summary call latency: median 1.1 to 2.2 s per drug, with occasional slow outliers (p95 up to 18 s). A cold run that fetches fresh openFDA data takes about 14 s; repeats are served from a 24-hour cache.
 
@@ -56,7 +55,7 @@ Raw runs: `measurements/summary_runs.jsonl`. Reproduce: `python -m safety_signal
 
 - **FAERS is not incidence data.** Reports are voluntary, unvalidated, can be duplicated, and reflect what gets reported, not what happens. PRR can be inflated by indication (a drug for diabetes is reported with "blood glucose increased").
 - **"Found in label" means the term appears in the sampled label text**, not that the label lists it as an adverse effect. The matcher cannot tell "causes X" from "not recommended in patients with X". "Not found" can also mean a synonym the matcher does not know, or that the sampled records differ.
-- **The evaluation is small and has one labeller.** 72 rows, labels drafted with LLM assistance and every row reviewed by one person. The 0.82 vs 0.77 precision gap on the holdout is within what 72 rows can resolve; I would not claim an improvement from it.
+- **The evaluation is small and has one labeller.** 72 rows, labels drafted with LLM assistance and every row reviewed by one person. Differences of a few points between runs are within what 72 rows can resolve.
 - **The output checks are lexical and structural, not semantic.** They catch wrong numbers, wrong label status and forbidden wording. They cannot catch a fluent sentence that misleads in a way I did not write a check for. An earlier version of the checks passed a summary that gave the wrong label status; that is why the per-sentence status check exists.
 - **30 runs on 6 drugs is a small sample.** The pass rate describes these inputs and this model on the day I ran it. Models change; Groq retired the model this project started on during development.
 - **The refusal filter is unmeasured.** It is a regex prefilter plus a model sentinel; I have not built a labelled question set for it yet.
