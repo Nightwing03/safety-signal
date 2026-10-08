@@ -55,3 +55,37 @@ def test_library_errors_become_exit_code_one(capsys):
     code, _ = run(["alpha"], factory)
     assert code == 1
     assert "error: boom" in capsys.readouterr().err
+
+
+def test_summary_flag_prints_a_checked_summary_and_default_does_not_call_the_model():
+    from safety_signal.summary import SummaryOut
+    from tests.fakes import FakeLLM
+
+    text = "Of 3 reactions analysed, 1 was flagged. RASH (100 reports, PRR 5.21) was found in the sampled label text."
+    llm = FakeLLM([SummaryOut(summary=text, cited_reactions=["RASH"])])
+    labels = [make_label(adverse_reactions="rash")]
+    buf = io.StringIO()
+    code = main(["alpha", "--summary"], source_factory=lambda a: make_events(),
+                label_factory=lambda a: FakeLabels(labels), llm_factory=lambda a: llm, out=buf)
+    assert code == 0 and "summary source: llm" in buf.getvalue() and text in buf.getvalue()
+
+    def boom(args):
+        raise AssertionError("model must not be built without --summary")
+
+    buf = io.StringIO()
+    assert main(["alpha"], source_factory=lambda a: make_events(),
+                label_factory=lambda a: FakeLabels(labels), llm_factory=boom, out=buf) == 0
+
+
+def test_failed_summary_attempts_are_shown_with_their_reasons():
+    from safety_signal.summary import SummaryOut
+    from tests.fakes import FakeLLM
+
+    bad = SummaryOut(summary="RASH causes 999 problems.", cited_reactions=["RASH"])
+    buf = io.StringIO()
+    main(["alpha", "--summary"], source_factory=lambda a: make_events(),
+         label_factory=lambda a: FakeLabels([make_label(adverse_reactions="rash")]),
+         llm_factory=lambda a: FakeLLM([bad, bad]), out=buf)
+    text = buf.getvalue()
+    assert "summary source: template, attempts: 2" in text
+    assert "attempt 1 failed checks:" in text and "attempt 2 failed checks:" in text and "999" in text

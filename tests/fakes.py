@@ -122,3 +122,45 @@ class FakeLabels:
 
     def labels(self, drug):
         return list(self._labels)
+
+
+from types import SimpleNamespace  # noqa: E402
+
+from safety_signal.facts import Facts, FindingFact  # noqa: E402
+
+
+class FakeLLM:
+    """Plays back queued outputs (or raises queued exceptions) and records each call."""
+
+    def __init__(self, items):
+        self.items = list(items)
+        self.calls = []
+
+    def complete(self, *, system=None, user, response_model=None, temperature=None):
+        self.calls.append({"system": system, "user": user, "model": response_model})
+        if not self.items:
+            raise AssertionError("model was called but no response was queued")
+        item = self.items.pop(0)
+        if isinstance(item, Exception):
+            raise item
+        return SimpleNamespace(
+            value=item, provider="fake", model="fake-1", latency_ms=10.0,
+            input_tokens=100, output_tokens=50, cost_usd=0.0,
+        )
+
+
+def make_facts(drug="alpha", as_of="2026-07-30"):
+    return Facts(
+        drug, as_of, 12,
+        (
+            FindingFact("LACTIC ACIDOSIS", 19398, 72.89, 533800.6, True, "labeled", ("boxed_warning",)),
+            FindingFact("ACUTE KIDNEY INJURY", 18251, 6.37, 73187.3, True, "candidate", ()),
+            FindingFact("NAUSEA", 30165, 1.86, 11957.0, False, "labeled", ("adverse_reactions",)),
+        ),
+    )
+
+
+GOOD_SUMMARY = (
+    "Of 3 reactions analysed, 2 were flagged. LACTIC ACIDOSIS (19,398 reports, PRR 72.89) was found in the "
+    "sampled label text. ACUTE KIDNEY INJURY (18,251 reports, PRR 6.37) was not found in the sampled label text."
+)

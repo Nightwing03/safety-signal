@@ -1,6 +1,7 @@
 """Response caches. All share two methods: get(key) -> dict | None and put(key, value)."""
 import json
 import sqlite3
+import threading
 import time
 from pathlib import Path
 from typing import Callable, Optional
@@ -33,7 +34,8 @@ class SqliteCache:
             Path(path).parent.mkdir(parents=True, exist_ok=True)
         self._ttl = ttl_seconds
         self._time = time_fn
-        self._db = sqlite3.connect(path)
+        self._lock = threading.Lock()
+        self._db = sqlite3.connect(path, check_same_thread=False)  # access is serialised by self._lock
         self._db.execute(
             "CREATE TABLE IF NOT EXISTS cache ("
             "key TEXT PRIMARY KEY, body TEXT NOT NULL, fetched_at REAL NOT NULL)"
@@ -41,7 +43,8 @@ class SqliteCache:
         self._db.commit()
 
     def get(self, key: str) -> Optional[dict]:
-        row = self._db.execute("SELECT body, fetched_at FROM cache WHERE key = ?", (key,)).fetchone()
+        with self._lock:
+            row = self._db.execute("SELECT body, fetched_at FROM cache WHERE key = ?", (key,)).fetchone()
         if row is None:
             return None
         body, fetched_at = row
@@ -50,11 +53,12 @@ class SqliteCache:
         return json.loads(body)
 
     def put(self, key: str, value: dict) -> None:
-        self._db.execute(
-            "INSERT OR REPLACE INTO cache (key, body, fetched_at) VALUES (?, ?, ?)",
-            (key, json.dumps(value), self._time()),
-        )
-        self._db.commit()
+        with self._lock:
+            self._db.execute(
+                "INSERT OR REPLACE INTO cache (key, body, fetched_at) VALUES (?, ?, ?)",
+                (key, json.dumps(value), self._time()),
+            )
+            self._db.commit()
 
     def close(self) -> None:
         self._db.close()

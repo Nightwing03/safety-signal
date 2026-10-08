@@ -39,3 +39,22 @@ def test_sqlite_put_overwrites(tmp_path):
     c.put("k", {"v": 1})
     c.put("k", {"v": 2})
     assert c.get("k") == {"v": 2}
+
+
+def test_sqlite_cache_can_be_used_from_other_threads(tmp_path):
+    import threading
+
+    c = SqliteCache(str(tmp_path / "c.sqlite"))
+    errors = []
+
+    def work(i):
+        try:
+            c.put(f"k{i}", {"v": i})
+            assert c.get(f"k{i}") == {"v": i}
+        except Exception as exc:  # noqa: BLE001
+            errors.append(exc)
+
+    threads = [threading.Thread(target=work, args=(i,)) for i in range(8)]
+    [t.start() for t in threads]
+    [t.join() for t in threads]
+    assert errors == []

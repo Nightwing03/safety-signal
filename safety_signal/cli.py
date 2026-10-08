@@ -9,7 +9,9 @@ from safety_signal.config import load_api_key
 from safety_signal.errors import SafetySignalError
 from safety_signal.events import EventSource, OpenFDAEvents
 from safety_signal.labels import LabelSource, OpenFDALabels
+from safety_signal.facts import build_facts
 from safety_signal.matcher import LabelIndex
+from safety_signal.summary import summarize
 from safety_signal.pairs import PairResult, analyze_drug
 
 CAVEAT = (
@@ -55,6 +57,7 @@ def main(
     argv: Optional[list[str]] = None,
     source_factory: Callable[[argparse.Namespace], EventSource] = default_source,
     label_factory: Callable[[argparse.Namespace], LabelSource] = default_labels,
+    llm_factory: Optional[Callable[[argparse.Namespace], object]] = None,
     out: Optional[TextIO] = None,
 ) -> int:
     out = out if out is not None else sys.stdout
@@ -64,6 +67,7 @@ def main(
     parser.add_argument("--cache", default=".cache/openfda.sqlite")
     parser.add_argument("--no-cache", action="store_true")
     parser.add_argument("--no-labels", action="store_true", help="skip the label comparison")
+    parser.add_argument("--summary", action="store_true", help="add a checked language-model summary")
     args = parser.parse_args(argv)
     try:
         source = source_factory(args)
@@ -72,6 +76,20 @@ def main(
             results = analyze_drug(source, drug, top_n=args.top)
             index = LabelIndex(label_source.labels(drug)) if label_source is not None and results else None
             print(format_results(drug, results, source.as_of(), index), file=out)
+            if args.summary and results:
+                if llm_factory is None:
+                    from safety_signal.llm import build_llm
+
+                    llm = build_llm()
+                else:
+                    llm = llm_factory(args)
+                res = summarize(build_facts(drug, results, source.as_of(), index), llm)
+                print(f"\n[summary source: {res.source}, attempts: {res.attempts}]", file=out)
+                if res.error:
+                    print(f"  model error: {res.error}", file=out)
+                for i, probs in enumerate(res.problems, 1):
+                    print(f"  attempt {i} failed checks: " + "; ".join(probs), file=out)
+                print(res.text, file=out)
             print(file=out)
     except SafetySignalError as exc:
         print(f"error: {exc}", file=sys.stderr)

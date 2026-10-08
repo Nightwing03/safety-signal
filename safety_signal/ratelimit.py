@@ -1,4 +1,5 @@
 """Sliding-window rate limiter. Clock and sleep are injected so tests never really wait."""
+import threading
 import time
 from collections import deque
 from typing import Callable
@@ -19,9 +20,14 @@ class RateLimiter:
         self._sleep = sleep
         self._window = window_seconds
         self._stamps: deque[float] = deque()
+        self._lock = threading.Lock()
 
     def wait(self) -> None:
-        """Block until one more request is allowed, then record it."""
+        """Block until one more request is allowed, then record it. Callers queue behind each other (by design)."""
+        with self._lock:
+            self._wait_locked()
+
+    def _wait_locked(self) -> None:
         while True:
             t = self._now()
             while self._stamps and t - self._stamps[0] >= self._window:
