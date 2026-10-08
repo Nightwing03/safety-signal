@@ -68,6 +68,18 @@ def _status_phrases(sentence: str) -> set:
     return found
 
 
+def _mentioned(norm: str, finding, facts: Facts) -> bool:
+    """True when the sentence names this reaction on its own, not only as part of a longer reaction name.
+
+    "PAIN" counts as mentioned in "PAIN IN EXTREMITY (..) and PAIN (..)" because one occurrence is standalone;
+    it does not count in "PAIN IN EXTREMITY (..)" alone."""
+    masked = norm
+    for g in facts.findings:
+        if g is not finding and len(g.reaction) > len(finding.reaction) and contains_phrase(normalize(g.reaction), finding.reaction):
+            masked = re.sub(rf"(?<![a-z0-9]){re.escape(normalize(g.reaction))}(?![a-z0-9])", " ", masked)
+    return contains_phrase(masked, finding.reaction)
+
+
 def binding_problems(text: str, facts: Facts, require_flagged: bool) -> list:
     """Each sentence that names reactions and states a label status must state the status those reactions have.
 
@@ -77,13 +89,7 @@ def binding_problems(text: str, facts: Facts, require_flagged: bool) -> list:
     for sentence in _SENTENCES.split(text):
         phrases = _status_phrases(sentence)
         norm = normalize(sentence)
-        mentioned = [f for f in facts.findings if contains_phrase(norm, f.reaction)]
-        # "PAIN" inside "PAIN IN EXTREMITY" is not a separate mention.
-        mentioned = [
-            f for f in mentioned
-            if not any(g is not f and contains_phrase(normalize(g.reaction), f.reaction) and len(g.reaction) > len(f.reaction)
-                       for g in mentioned)
-        ]
+        mentioned = [f for f in facts.findings if _mentioned(norm, f, facts)]
         if not mentioned or not phrases:
             continue
         if len(phrases) > 1:

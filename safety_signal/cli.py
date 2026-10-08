@@ -84,7 +84,8 @@ def main(
                 else:
                     llm = llm_factory(args)
                 res = summarize(build_facts(drug, results, source.as_of(), index), llm)
-                print(f"\n[summary source: {res.source}, attempts: {res.attempts}]", file=out)
+                print(f"\n[summary source: {res.source}, attempts: {res.attempts}, "
+                      f"answered by: {res.provider}/{res.model}, failed providers: {res.providers_tried or 'none'}]", file=out)
                 if res.error:
                     print(f"  model error: {res.error}", file=out)
                 for i, probs in enumerate(res.problems, 1):

@@ -65,6 +65,7 @@ class SummaryResult:
     input_tokens: Optional[int] = None
     output_tokens: Optional[int] = None
     cost_usd: Optional[float] = None
+    providers_tried: list = field(default_factory=list)  # providers that failed before the one that answered
 
 
 def _add(a, b):
@@ -74,6 +75,8 @@ def _add(a, b):
 def _fold(result: SummaryResult, res: Any) -> None:
     result.provider = getattr(res, "provider", result.provider)
     result.model = getattr(res, "model", result.model)
+    tried = getattr(res, "providers_tried", None)
+    result.providers_tried = list(tried) if isinstance(tried, (list, tuple)) else result.providers_tried
     result.latency_ms += float(getattr(res, "latency_ms", 0.0) or 0.0)
     result.input_tokens = _add(result.input_tokens, getattr(res, "input_tokens", None))
     result.output_tokens = _add(result.output_tokens, getattr(res, "output_tokens", None))

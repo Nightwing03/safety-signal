@@ -29,7 +29,7 @@ def build_llm(dotenv_path: str = ".env"):
 
     return LLMClient(
         [
-            GroqProvider(model=os.environ.get("GROQ_MODEL", "llama-3.1-8b-instant")),
+            GroqProvider(model=os.environ.get("GROQ_MODEL", "openai/gpt-oss-20b")),
             OllamaProvider(model=os.environ.get("OLLAMA_MODEL", "qwen2.5")),
         ],
         requests_per_minute={"groq": 25},

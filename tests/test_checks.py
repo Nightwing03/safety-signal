@@ -133,3 +133,22 @@ def test_each_flagged_reaction_must_come_with_its_reports_and_prr():
     assert not any("ACUTE KIDNEY INJURY" in p and "reports and PRR" in p for p in problems)
     # answers to questions are not required to repeat the numbers
     assert check_text("LACTIC ACIDOSIS was found in the sampled label text.", ["LACTIC ACIDOSIS"], make_facts(), require_flagged=False) == []
+
+
+def test_a_reaction_named_alongside_a_longer_one_in_the_same_sentence_still_counts():
+    facts = Facts("alpha", None, 1, (
+        FindingFact("PAIN IN EXTREMITY", 9, 2.5, 9.0, True, "candidate"),
+        FindingFact("PAIN", 8, 2.5, 9.0, True, "candidate"),
+    ))
+    text = ("Of 2 reactions analysed, 2 were flagged. PAIN IN EXTREMITY (9 reports, PRR 2.50) and PAIN (8 reports, "
+            "PRR 2.50) were not found in the sampled label text.")
+    assert check_text(text, ["PAIN IN EXTREMITY", "PAIN"], facts) == []
+
+
+def test_the_shorter_reaction_is_still_required_when_only_the_longer_name_is_given():
+    facts = Facts("alpha", None, 1, (
+        FindingFact("PAIN IN EXTREMITY", 9, 2.5, 9.0, True, "candidate"),
+        FindingFact("PAIN", 8, 2.5, 9.0, True, "candidate"),
+    ))
+    text = "Of 2 reactions analysed, 2 were flagged. PAIN IN EXTREMITY (9 reports, PRR 2.50) was not found in the sampled label text."
+    assert any("'PAIN'" in p for p in check_text(text, ["PAIN IN EXTREMITY"], facts))
