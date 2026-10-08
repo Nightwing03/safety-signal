@@ -108,3 +108,17 @@ def make_events():
         },
         top={"alpha": ["DRUG INEFFECTIVE", "NAUSEA", "RASH", "RARE"]},
     )
+
+
+def make_label(set_id="x", generic="ALPHA", **sections):
+    from safety_signal.labels import Label
+
+    return Label(set_id, (generic,), (), None, dict(sections))
+
+
+class FakeLabels:
+    def __init__(self, labels):
+        self._labels = list(labels)
+
+    def labels(self, drug):
+        return list(self._labels)

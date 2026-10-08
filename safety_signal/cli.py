@@ -8,6 +8,8 @@ from safety_signal.client import OpenFDAClient
 from safety_signal.config import load_api_key
 from safety_signal.errors import SafetySignalError
 from safety_signal.events import EventSource, OpenFDAEvents
+from safety_signal.labels import LabelSource, OpenFDALabels
+from safety_signal.matcher import LabelIndex
 from safety_signal.pairs import PairResult, analyze_drug
 
 CAVEAT = (
@@ -16,18 +18,21 @@ CAVEAT = (
 )
 
 
-def format_results(drug: str, results: list[PairResult], as_of: Optional[str]) -> str:
+def format_results(
+    drug: str, results: list[PairResult], as_of: Optional[str], index: Optional[LabelIndex] = None
+) -> str:
     lines = [f"Drug: {drug}    data as of: {as_of or 'unknown'}", CAVEAT, ""]
     if not results:
         lines.append("No reactions found for this drug.")
         return "\n".join(lines)
-    lines.append(f"{'Reaction':<44}{'Reports':>9}{'PRR':>8}{'Chi2':>11}  Flag")
+    lines.append(f"{'Reaction':<44}{'Reports':>9}{'PRR':>8}{'Chi2':>11}  {'Flag':<8}Label")
     for r in results:
         s = r.signal
         prr = "n/a" if s.prr is None else f"{s.prr:.2f}"
         chi2 = "n/a" if s.chi2 is None else f"{s.chi2:.1f}"
+        label = index.match(r.reaction).status() if index is not None else "-"
         lines.append(
-            f"{r.reaction[:43]:<44}{s.table.a:>9}{prr:>8}{chi2:>11}  {'SIGNAL' if s.flagged else ''}"
+            f"{r.reaction[:43]:<44}{s.table.a:>9}{prr:>8}{chi2:>11}  {'SIGNAL' if s.flagged else '':<8}{label}"
         )
     return "\n".join(lines)
 
@@ -40,9 +45,16 @@ def default_source(args: argparse.Namespace) -> EventSource:
     return OpenFDAEvents(OpenFDAClient(api_key=key, cache=cache))
 
 
+def default_labels(args: argparse.Namespace) -> LabelSource:
+    key = load_api_key()
+    cache = NullCache() if args.no_cache else SqliteCache(args.cache)
+    return OpenFDALabels(OpenFDAClient(api_key=key, cache=cache))
+
+
 def main(
     argv: Optional[list[str]] = None,
     source_factory: Callable[[argparse.Namespace], EventSource] = default_source,
+    label_factory: Callable[[argparse.Namespace], LabelSource] = default_labels,
     out: Optional[TextIO] = None,
 ) -> int:
     out = out if out is not None else sys.stdout
@@ -51,12 +63,15 @@ def main(
     parser.add_argument("--top", type=int, default=15, help="reactions to analyse per drug")
     parser.add_argument("--cache", default=".cache/openfda.sqlite")
     parser.add_argument("--no-cache", action="store_true")
+    parser.add_argument("--no-labels", action="store_true", help="skip the label comparison")
     args = parser.parse_args(argv)
     try:
         source = source_factory(args)
+        label_source = None if args.no_labels else label_factory(args)
         for drug in args.drugs:
             results = analyze_drug(source, drug, top_n=args.top)
-            print(format_results(drug, results, source.as_of()), file=out)
+            index = LabelIndex(label_source.labels(drug)) if label_source is not None and results else None
+            print(format_results(drug, results, source.as_of(), index), file=out)
             print(file=out)
     except SafetySignalError as exc:
         print(f"error: {exc}", file=sys.stderr)

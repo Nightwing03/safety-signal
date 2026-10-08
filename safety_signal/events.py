@@ -18,7 +18,7 @@ class EventSource(Protocol):
     def as_of(self) -> Optional[str]: ...
 
 
-def _quote(value: str) -> str:
+def quote_term(value: str) -> str:
     if '"' in value or not value.strip():
         raise ValueError(f"invalid search term: {value!r}")
     return f'"{value.strip()}"'
@@ -54,16 +54,16 @@ class OpenFDAEvents:
         return self._total(None)
 
     def drug_total(self, drug: str) -> int:
-        return self._total(f"{DRUG_FIELD}:{_quote(drug)}")
+        return self._total(f"{DRUG_FIELD}:{quote_term(drug)}")
 
     def reaction_total(self, reaction: str) -> int:
-        return self._total(f"{REACTION_FIELD}:{_quote(reaction)}")
+        return self._total(f"{REACTION_FIELD}:{quote_term(reaction)}")
 
     def pair_count(self, drug: str, reaction: str) -> int:
-        return self._total(f"{DRUG_FIELD}:{_quote(drug)} AND {REACTION_FIELD}:{_quote(reaction)}")
+        return self._total(f"{DRUG_FIELD}:{quote_term(drug)} AND {REACTION_FIELD}:{quote_term(reaction)}")
 
     def top_reactions(self, drug: str) -> list[str]:
-        params = {"search": f"{DRUG_FIELD}:{_quote(drug)}", "count": REACTION_FIELD}
+        params = {"search": f"{DRUG_FIELD}:{quote_term(drug)}", "count": REACTION_FIELD}
         try:
             body = self._body(params)
         except NotFoundError:
